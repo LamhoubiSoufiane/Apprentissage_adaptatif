@@ -8,6 +8,7 @@ class StudentAgent:
         self.data_dir = Path(__file__).parent.parent / "data"
         self.students_file = self.data_dir / "students.json"
         self.learning_data_file = self.data_dir / "learning_data.json"
+        self.feedback_file = self.data_dir / "feedback.json"
         self.init_data_files()
 
     def init_data_files(self):
@@ -22,6 +23,15 @@ class StudentAgent:
                         "name": "Jean Dupont",
                         "level": "Licence 1",
                         "preferred_learning_style": "visual",
+                        "current_preferences": {
+                            "subject": "Mathématiques",
+                            "module": "Algèbre",
+                            "difficulty": 3,
+                            "duration": 30,
+                            "content_types": ["Vidéos", "Exercices interactifs"],
+                            "learning_goal": "Comprendre les bases de l'algèbre"
+                        },
+                        "learning_preferences_history": [],
                         "enrolled_subjects": [
                             "Mathématiques",
                             "Physique",
@@ -152,12 +162,34 @@ class StudentAgent:
 
     def _get_optimal_session_duration(self, df):
         """Détermine la durée optimale des sessions d'apprentissage"""
-        performance_by_duration = df.groupby(pd.qcut(df['time_spent'], 4))['score'].mean()
-        optimal_duration = performance_by_duration.idxmax()
-        return {
-            "min": optimal_duration.left,
-            "max": optimal_duration.right
-        }
+        try:
+            if len(df) < 4:  # Si pas assez de données
+                return {
+                    "min": 30,
+                    "max": 45
+                }
+            
+            # Créer des bins de durée plus robustes
+            bins = [0, 30, 60, 90, float('inf')]
+            labels = ['0-30', '31-60', '61-90', '90+']
+            df['duration_bin'] = pd.cut(df['time_spent'], bins=bins, labels=labels)
+            
+            performance_by_duration = df.groupby('duration_bin')['score'].mean()
+            best_duration = performance_by_duration.idxmax()
+            
+            # Extraire les limites du meilleur intervalle
+            if best_duration == '0-30':
+                return {"min": 0, "max": 30}
+            elif best_duration == '31-60':
+                return {"min": 31, "max": 60}
+            elif best_duration == '61-90':
+                return {"min": 61, "max": 90}
+            else:
+                return {"min": 90, "max": 120}
+            
+        except Exception as e:
+            print(f"Erreur dans _get_optimal_session_duration: {str(e)}")
+            return {"min": 30, "max": 45}  # Valeurs par défaut
 
     def _get_best_performing_subjects(self, df):
         """Identifie les matières où l'étudiant performe le mieux"""
@@ -297,51 +329,92 @@ class StudentAgent:
 
     def _save_learning_style_details(self, style_percentages):
         """Sauvegarde les détails de l'analyse du style d'apprentissage"""
-        learning_style_details = {
-            "timestamp": datetime.now().isoformat(),
-            "style_percentages": style_percentages,
-            "primary_style": max(style_percentages.items(), key=lambda x: x[1])[0],
-            "secondary_styles": sorted(
-                [(style, pct) for style, pct in style_percentages.items()],
-                key=lambda x: x[1],
-                reverse=True
-            )[1:]
-        }
-        
-        # Créer le fichier s'il n'existe pas
-        learning_styles_file = self.data_dir / "learning_styles.json"
-        if not learning_styles_file.exists():
-            with open(learning_styles_file, "w", encoding='utf-8') as f:
-                json.dump({"learning_style_analyses": []}, f, indent=4, ensure_ascii=False)
-        
-        # Ajouter la nouvelle analyse
-        with open(learning_styles_file, "r+", encoding='utf-8') as f:
-            data = json.load(f)
-            data["learning_style_analyses"].append(learning_style_details)
-            f.seek(0)
-            json.dump(data, f, indent=4, ensure_ascii=False)
-            f.truncate()
+        try:
+            learning_style_details = {
+                "timestamp": datetime.now().isoformat(),
+                "style_percentages": style_percentages,
+                "primary_style": max(style_percentages.items(), key=lambda x: x[1])[0],
+                "secondary_styles": sorted(
+                    [(style, pct) for style, pct in style_percentages.items()],
+                    key=lambda x: x[1],
+                    reverse=True
+                )[1:]
+            }
+            
+            # Créer le fichier s'il n'existe pas
+            learning_styles_file = self.data_dir / "learning_styles.json"
+            if not learning_styles_file.exists():
+                with open(learning_styles_file, "w", encoding='utf-8') as f:
+                    json.dump({"learning_style_analyses": []}, f, indent=4, ensure_ascii=False)
+            
+            # Ajouter la nouvelle analyse
+            with open(learning_styles_file, "r+", encoding='utf-8') as f:
+                data = json.load(f)
+                data["learning_style_analyses"].append(learning_style_details)
+                f.seek(0)
+                json.dump(data, f, indent=4, ensure_ascii=False)
+                f.truncate()
+            return True
+            
+        except Exception as e:
+            print(f"Erreur dans _save_learning_style_details: {str(e)}")
+            return False
 
     def save_learning_style(self, student_id, learning_style):
         """Enregistre le style d'apprentissage déterminé"""
-        with open(self.students_file, "r+", encoding='utf-8') as f:
-            data = json.load(f)
+        try:
+            # Vérifier si le fichier existe
+            if not self.students_file.exists():
+                default_data = {"students": []}
+                with open(self.students_file, "w", encoding='utf-8') as f:
+                    json.dump(default_data, f, indent=4, ensure_ascii=False)
+
+            # Lire les données existantes
+            with open(self.students_file, "r", encoding='utf-8') as f:
+                data = json.load(f)
+
+            # Trouver ou créer l'étudiant
+            student_found = False
             for student in data["students"]:
                 if student["id"] == student_id:
                     student["preferred_learning_style"] = learning_style
                     student["learning_style_determined"] = True
                     student["learning_style_updated"] = datetime.now().isoformat()
+                    
                     # Charger les détails du style d'apprentissage
                     learning_styles_file = self.data_dir / "learning_styles.json"
                     if learning_styles_file.exists():
-                        with open(learning_styles_file, "r", encoding='utf-8') as lsf:
-                            style_data = json.load(lsf)
-                            latest_analysis = style_data["learning_style_analyses"][-1]
-                            student["learning_style_details"] = latest_analysis
+                        try:
+                            with open(learning_styles_file, "r", encoding='utf-8') as lsf:
+                                style_data = json.load(lsf)
+                                if "learning_style_analyses" in style_data and style_data["learning_style_analyses"]:
+                                    latest_analysis = style_data["learning_style_analyses"][-1]
+                                    student["learning_style_details"] = latest_analysis
+                        except Exception as e:
+                            print(f"Erreur lors du chargement des détails du style: {str(e)}")
+                    student_found = True
                     break
-            f.seek(0)
-            json.dump(data, f, indent=4, ensure_ascii=False)
-            f.truncate()
+
+            # Si l'étudiant n'existe pas, le créer
+            if not student_found:
+                new_student = {
+                    "id": student_id,
+                    "preferred_learning_style": learning_style,
+                    "learning_style_determined": True,
+                    "learning_style_updated": datetime.now().isoformat(),
+                    "enrolled_subjects": []
+                }
+                data["students"].append(new_student)
+
+            # Sauvegarder les modifications
+            with open(self.students_file, "w", encoding='utf-8') as f:
+                json.dump(data, f, indent=4, ensure_ascii=False)
+
+        except Exception as e:
+            print(f"Erreur lors de la sauvegarde du style d'apprentissage: {str(e)}")
+            return False
+
+        return True
 
     def track_progress(self, student_id, time_period="week"):
         """Suit les progrès d'un étudiant sur une période donnée"""
@@ -447,4 +520,122 @@ class StudentAgent:
         elif recent_performance < 0.75:
             return "moyenne"
         else:
-            return "basse" 
+            return "basse"
+
+    def get_current_preferences(self, student_id):
+        """Récupère les préférences actuelles de l'étudiant"""
+        try:
+            with open(self.students_file, "r", encoding='utf-8') as f:
+                students_data = json.load(f)
+
+            student = next((s for s in students_data["students"] if s["id"] == student_id), None)
+            if student:
+                # Si l'étudiant existe mais n'a pas encore de préférences, créer des préférences par défaut
+                if "current_preferences" not in student:
+                    default_preferences = {
+                        "subject": "Mathématiques",
+                        "module": "Algèbre",
+                        "difficulty": 3,
+                        "duration": 30,
+                        "content_types": ["Vidéos", "Exercices interactifs"],
+                        "learning_goal": ""
+                    }
+                    student["current_preferences"] = default_preferences
+                    # Sauvegarder les préférences par défaut
+                    with open(self.students_file, "w", encoding='utf-8') as f:
+                        json.dump(students_data, f, indent=4, ensure_ascii=False)
+                return student["current_preferences"]
+            return None
+
+        except Exception as e:
+            print(f"Erreur lors de la récupération des préférences: {str(e)}")
+            return None
+
+    def update_learning_preferences(self, student_id, new_preferences):
+        """Met à jour les préférences d'apprentissage de l'étudiant"""
+        try:
+            with open(self.students_file, "r", encoding='utf-8') as f:
+                students_data = json.load(f)
+
+            # Trouver l'étudiant
+            student = next((s for s in students_data["students"] if s["id"] == student_id), None)
+            if not student:
+                # Créer un nouvel étudiant si non existant
+                student = {
+                    "id": student_id,
+                    "preferred_learning_style": "visual",  # Style par défaut
+                    "learning_style_determined": False,
+                    "learning_preferences_history": [],
+                    "enrolled_subjects": []
+                }
+                students_data["students"].append(student)
+
+            # Sauvegarder l'historique des préférences
+            if "learning_preferences_history" not in student:
+                student["learning_preferences_history"] = []
+            
+            # Ajouter les nouvelles préférences avec timestamp
+            preference_entry = {
+                "timestamp": datetime.now().isoformat(),
+                "preferences": new_preferences
+            }
+            student["learning_preferences_history"].append(preference_entry)
+
+            # Mettre à jour les préférences actuelles
+            student["current_preferences"] = new_preferences
+
+            # Mettre à jour le style d'apprentissage basé sur les types de contenu préférés
+            content_type_mapping = {
+                "Vidéos": "visual",
+                "Documents PDF": "text",
+                "Audio": "audio",
+                "Exercices interactifs": "practical",
+                "Quiz": "practical"
+            }
+
+            # Calculer les poids pour chaque style
+            style_weights = {
+                "visual": 0,
+                "text": 0,
+                "audio": 0,
+                "practical": 0
+            }
+
+            # Donner plus de poids aux préférences récentes
+            for content_type in new_preferences.get("content_types", []):
+                if content_type in content_type_mapping:
+                    style_weights[content_type_mapping[content_type]] += 2
+
+            # Normaliser les poids
+            total_weight = sum(style_weights.values()) or 1
+            style_percentages = {
+                style: (weight / total_weight) * 100 
+                for style, weight in style_weights.items()
+            }
+
+            # Déterminer le style dominant et les styles secondaires
+            sorted_styles = sorted(
+                style_percentages.items(),
+                key=lambda x: x[1],
+                reverse=True
+            )
+
+            # Mettre à jour les détails du style d'apprentissage
+            student["learning_style_details"] = {
+                "timestamp": datetime.now().isoformat(),
+                "style_percentages": style_percentages,
+                "primary_style": sorted_styles[0][0],
+                "secondary_styles": sorted_styles[1:]
+            }
+            student["preferred_learning_style"] = sorted_styles[0][0]
+            student["learning_style_updated"] = datetime.now().isoformat()
+
+            # Sauvegarder les modifications
+            with open(self.students_file, "w", encoding='utf-8') as f:
+                json.dump(students_data, f, indent=4, ensure_ascii=False)
+
+            return True
+
+        except Exception as e:
+            print(f"Erreur lors de la mise à jour des préférences: {str(e)}")
+            return False 

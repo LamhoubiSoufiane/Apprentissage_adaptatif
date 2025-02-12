@@ -72,254 +72,366 @@ class TutorAgent:
             with open(self.learning_data_file, "w", encoding='utf-8') as f:
                 json.dump(test_data, f, indent=4, ensure_ascii=False)
 
-    def provide_feedback(self, student_id, content_id):
+    def provide_feedback(self, student_id, content_id=None):
         """Fournit un feedback personnalisé et adaptatif"""
-        # Charger les données d'apprentissage
-        with open(self.learning_data_file, "r", encoding='utf-8') as f:
-            learning_data = json.load(f)
+        try:
+            # Charger les données d'apprentissage
+            with open(self.learning_data_file, "r", encoding='utf-8') as f:
+                learning_data = json.load(f)
 
-        # Obtenir l'historique complet et les enregistrements spécifiques
-        all_records = pd.DataFrame(learning_data["learning_records"])
-        all_records['timestamp'] = pd.to_datetime(all_records['timestamp'])
-        
-        student_records = all_records[all_records["student_id"] == student_id]
-        content_records = student_records[student_records["content_id"] == content_id]
-        
-        if content_records.empty:
-            return {
-                "status": "error",
-                "message": "Aucune donnée disponible pour ce contenu"
+            # Initialiser les données pour un nouvel étudiant si nécessaire
+            student_records = [r for r in learning_data["learning_records"] if r["student_id"] == student_id]
+            if not student_records:
+                # Créer des données initiales pour le nouvel étudiant
+                initial_record = {
+                    "student_id": student_id,
+                    "timestamp": datetime.now().isoformat(),
+                    "subject": "Général",
+                    "content_type": "initial",
+                    "score": 0.0,
+                    "completion_rate": 0,
+                    "time_spent": 0,
+                    "success_rate": 0.0
+                }
+                learning_data["learning_records"].append(initial_record)
+                with open(self.learning_data_file, "w", encoding='utf-8') as f:
+                    json.dump(learning_data, f, indent=4, ensure_ascii=False)
+                student_records = [initial_record]
+
+            # Analyser les données
+            df = pd.DataFrame(student_records)
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            
+            # Générer le feedback
+            feedback = {
+                "timestamp": datetime.now().isoformat(),
+                "student_id": student_id,
+                "content_id": content_id,
+                "performance_summary": self._generate_performance_summary(df),
+                "learning_plan": self._generate_learning_plan(df),
+                "personalized_advice": self._generate_personalized_advice(df),
+                "adaptive_recommendations": self._generate_adaptive_recommendations(df),
+                "progress_tracking": self._track_detailed_progress(df),
+                "skill_assessment": self._assess_skills(df),
+                "engagement_metrics": self._analyze_engagement(df),
+                "learning_path": self._suggest_learning_path(df),
+                "mastery_tracking": self._track_mastery_levels(df)
             }
 
-        # Analyse approfondie
-        latest_record = content_records.iloc[-1]
-        learning_context = self._analyze_learning_context(student_records, content_records)
-        
-        feedback = {
-            "timestamp": datetime.now().isoformat(),
-            "student_id": student_id,
-            "content_id": content_id,
-            "performance_summary": self._generate_performance_summary(latest_record, learning_context),
-            "progress_analysis": self._analyze_progress(content_records),
-            "learning_insights": self._generate_learning_insights(student_records, content_records),
-            "recommendations": self._generate_adaptive_recommendations(student_records, content_records),
-            "next_steps": self._suggest_next_steps(student_records, content_records)
-        }
+            return feedback
 
-        # Sauvegarder le feedback
-        self._save_feedback(feedback)
-        return feedback
+        except Exception as e:
+            print(f"Erreur dans provide_feedback: {str(e)}")
+            return {"status": "error", "message": "Erreur lors de la génération du feedback"}
 
-    def _analyze_learning_context(self, student_records, content_records):
-        """Analyse le contexte d'apprentissage complet"""
-        return {
-            "overall_progress": self._calculate_overall_progress(student_records),
-            "content_mastery": self._evaluate_content_mastery(content_records),
-            "learning_velocity": self._calculate_learning_velocity(student_records),
-            "engagement_level": self._evaluate_engagement(student_records),
-            "challenge_level": self._assess_challenge_level(content_records)
-        }
-
-    def _generate_performance_summary(self, latest_record, context):
+    def _generate_performance_summary(self, df):
         """Génère un résumé détaillé des performances"""
+        try:
+            if df.empty:
+                return self._get_default_performance_summary()
+
+            recent_df = df.sort_values('timestamp').tail(5)
+            return {
+                "current_performance": {
+                    "score": recent_df["score"].mean() if "score" in recent_df else 0.0,
+                    "completion_rate": recent_df["completion_rate"].mean() if "completion_rate" in recent_df else 0,
+                    "time_spent": recent_df["time_spent"].sum() if "time_spent" in recent_df else 0
+                },
+                "progress_rate": self._calculate_progress_rate(df),
+                "learning_velocity": self._calculate_learning_velocity(df),
+                "skill_gaps": self._identify_skill_gaps(df),
+                "improvement_areas": self._identify_improvement_areas(df)
+            }
+        except Exception as e:
+            print(f"Erreur dans _generate_performance_summary: {str(e)}")
+            return self._get_default_performance_summary()
+
+    def _get_default_performance_summary(self):
+        """Retourne un résumé de performance par défaut pour les nouveaux étudiants"""
         return {
             "current_performance": {
-                "score": latest_record["score"],
-                "completion_rate": latest_record["completion_rate"],
-                "time_spent": latest_record["time_spent"]
+                "score": 0.0,
+                "completion_rate": 0,
+                "time_spent": 0
             },
-            "relative_performance": self._calculate_relative_performance(latest_record, context),
-            "mastery_level": self._calculate_mastery_level(latest_record, context),
-            "improvement_areas": self._identify_improvement_areas(latest_record, context)
+            "progress_rate": "initial",
+            "learning_velocity": "à déterminer",
+            "skill_gaps": [],
+            "improvement_areas": ["Commencez par établir une base de connaissances"]
         }
 
-    def _analyze_progress(self, content_records):
-        """Analyse détaillée des progrès"""
+    def _generate_learning_plan(self, df):
+        """Génère un planning d'apprentissage personnalisé et adaptatif"""
+        try:
+            # Analyser les meilleures périodes d'apprentissage
+            if not df.empty and 'timestamp' in df.columns:
+                df['hour'] = pd.to_datetime(df['timestamp']).dt.hour
+                best_hours = df.groupby('hour')['score'].mean().nlargest(3).index.tolist()
+            else:
+                best_hours = [9, 14, 18]  # Heures par défaut
+
+            return {
+                "sessions_recommandées": {
+                    "matin": [f"{h:02d}h00" for h in best_hours if h < 12],
+                    "après-midi": [f"{h:02d}h00" for h in best_hours if 12 <= h < 18],
+                    "soir": [f"{h:02d}h00" for h in best_hours if h >= 18]
+                },
+                "durée_optimale": self._calculate_optimal_duration(df),
+                "fréquence_recommandée": self._calculate_optimal_frequency(df),
+                "planning_hebdomadaire": self._create_weekly_schedule(df),
+                "pauses_conseillées": self._calculate_optimal_breaks(df),
+                "adaptations_dynamiques": self._generate_dynamic_adaptations(df)
+            }
+        except Exception as e:
+            print(f"Erreur dans _generate_learning_plan: {str(e)}")
+            return self._get_default_learning_plan()
+
+    def _get_default_learning_plan(self):
+        """Retourne un plan d'apprentissage par défaut pour les nouveaux étudiants"""
         return {
-            "learning_curve": self._analyze_learning_curve(content_records),
-            "skill_development": self._analyze_skill_development(content_records),
-            "knowledge_gaps": self._identify_knowledge_gaps(content_records),
-            "mastery_trends": self._analyze_mastery_trends(content_records)
+            "sessions_recommandées": {
+                "matin": ["09h00", "11h00"],
+                "après-midi": ["14h00", "16h00"],
+                "soir": ["18h00", "20h00"]
+            },
+            "durée_optimale": "30 à 45 minutes",
+            "fréquence_recommandée": "3 à 4 sessions par semaine",
+            "planning_hebdomadaire": self._create_default_weekly_schedule(),
+            "pauses_conseillées": {
+                "courte_pause": "5-10 minutes toutes les 25 minutes",
+                "longue_pause": "20-30 minutes toutes les 2 heures"
+            }
         }
 
-    def _generate_learning_insights(self, student_records, content_records):
-        """Génère des insights personnalisés sur l'apprentissage"""
+    def _create_default_weekly_schedule(self):
+        """Crée un planning hebdomadaire par défaut pour les nouveaux étudiants"""
+        days = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"]
+        schedule = {}
+        for i, day in enumerate(days):
+            schedule[day] = {
+                "priorité": "haute" if i < 2 else "moyenne",
+                "sessions": ["09h00", "14h00"] if i < 3 else ["14h00", "18h00"],
+                "focus": "Introduction et concepts de base" if i == 0 else "Pratique et révision"
+            }
+        return schedule
+
+    def _calculate_progress_rate(self, df):
+        """Calcule le taux de progression de l'étudiant"""
+        try:
+            if len(df) < 2:
+                return "initial"
+            
+            recent_scores = df.sort_values('timestamp').tail(5)['score']
+            progress_rate = (recent_scores.iloc[-1] - recent_scores.iloc[0]) / len(recent_scores)
+            
+            if progress_rate > 0.1:
+                return "rapide"
+            elif progress_rate > 0:
+                return "régulier"
+            else:
+                return "nécessite attention"
+        except Exception:
+            return "à déterminer"
+
+    def _calculate_learning_velocity(self, df):
+        """Calcule la vitesse d'apprentissage"""
+        try:
+            if len(df) < 2:
+                return "à déterminer"
+            
+            df = df.sort_values('timestamp')
+            time_diff = (df['timestamp'].max() - df['timestamp'].min()).total_seconds() / 3600
+            score_diff = df['score'].diff().mean()
+            
+            velocity = score_diff / time_diff if time_diff > 0 else 0
+            
+            if velocity > 0.05:
+                return "rapide"
+            elif velocity > 0:
+                return "modérée"
+            else:
+                return "lente"
+        except Exception:
+            return "à déterminer"
+
+    def _generate_dynamic_adaptations(self, df):
+        """Génère des adaptations dynamiques basées sur les performances"""
+        try:
+            if df.empty:
+                return self._get_default_adaptations()
+
+            adaptations = {
+                "ajustements_difficulté": self._calculate_difficulty_adjustments(df),
+                "recommandations_format": self._suggest_format_adaptations(df),
+                "support_supplémentaire": self._identify_support_needs(df)
+            }
+            return adaptations
+        except Exception:
+            return self._get_default_adaptations()
+
+    def _get_default_adaptations(self):
+        """Retourne des adaptations par défaut pour les nouveaux étudiants"""
         return {
-            "strengths": self._identify_learning_strengths(student_records),
-            "challenges": self._identify_learning_challenges(content_records),
-            "learning_style_effectiveness": self._evaluate_learning_style(student_records),
-            "engagement_patterns": self._analyze_engagement_patterns(student_records)
+            "ajustements_difficulté": "commencer par le niveau débutant",
+            "recommandations_format": "utiliser une variété de formats",
+            "support_supplémentaire": "guidance pas à pas disponible"
         }
 
-    def _generate_adaptive_recommendations(self, student_records, content_records):
-        """Génère des recommandations adaptatives"""
-        recommendations = []
-        
-        # Analyser les besoins spécifiques
-        needs = self._identify_specific_needs(student_records, content_records)
-        
-        # Recommandations basées sur le niveau de maîtrise
-        mastery_level = self._calculate_mastery_level(content_records.iloc[-1], {})
-        if mastery_level < 0.6:
-            recommendations.append(self._generate_reinforcement_recommendation(content_records))
-        elif mastery_level < 0.8:
-            recommendations.append(self._generate_practice_recommendation(content_records))
-        else:
-            recommendations.append(self._generate_advancement_recommendation(content_records))
-
-        # Recommandations basées sur le style d'apprentissage
-        learning_style = self._evaluate_learning_style(student_records)
-        recommendations.append(self._generate_style_based_recommendation(learning_style))
-
-        # Recommandations pour l'engagement
-        engagement_level = self._evaluate_engagement(student_records)
-        if engagement_level < 0.7:
-            recommendations.append(self._generate_engagement_recommendation(student_records))
-
-        return recommendations
-
-    def _suggest_next_steps(self, student_records, content_records):
-        """Suggère les prochaines étapes d'apprentissage"""
-        mastery_level = self._calculate_mastery_level(content_records.iloc[-1], {})
-        learning_pace = self._calculate_learning_velocity(student_records)
-        
-        next_steps = []
-        
-        if mastery_level < 0.6:
-            next_steps.append({
-                "type": "revision",
-                "focus": self._identify_revision_areas(content_records),
-                "suggested_duration": self._calculate_optimal_duration(student_records),
-                "resources": self._suggest_revision_resources(content_records)
-            })
-        elif mastery_level < 0.8:
-            next_steps.append({
-                "type": "practice",
-                "exercises": self._suggest_practice_exercises(content_records),
-                "difficulty_level": self._suggest_difficulty_level(student_records),
-                "estimated_time": self._estimate_practice_time(student_records)
-            })
-        else:
-            next_steps.append({
-                "type": "advancement",
-                "suggested_topics": self._suggest_advanced_topics(student_records),
-                "challenge_level": self._suggest_challenge_level(student_records),
-                "preparation_steps": self._suggest_preparation_steps(student_records)
-            })
-        
-        return next_steps
-
-    def _calculate_mastery_level(self, record, context):
-        """Calcule le niveau de maîtrise"""
-        return (record["score"] * 0.4 + 
-                record["completion_rate"] * 0.3 + 
-                record["success_rate"] * 0.3)
-
-    def identify_struggles(self, student_id):
-        """Identifie les domaines où l'étudiant a des difficultés"""
-        with open(self.learning_data_file, "r", encoding='utf-8') as f:
-            learning_data = json.load(f)
-
-        records = [r for r in learning_data["learning_records"] if r["student_id"] == student_id]
-        if not records:
-            return []
-
-        df = pd.DataFrame(records)
-        
-        # Analyser les difficultés par sujet
-        subject_performance = df.groupby("subject")["score"].mean()
-        difficult_subjects = subject_performance[subject_performance < 0.6]
-
-        # Analyser les types de contenu problématiques
-        content_performance = df.groupby("content_type")["success_rate"].mean()
-        difficult_content_types = content_performance[content_performance < 0.6]
-
-        # Analyser le temps passé
-        time_analysis = df.groupby("subject")["time_spent"].mean()
-        time_intensive_subjects = time_analysis[time_analysis > time_analysis.mean() + time_analysis.std()]
-
-        struggles = {
-            "difficult_subjects": difficult_subjects.to_dict(),
-            "problematic_content_types": difficult_content_types.to_dict(),
-            "time_intensive_subjects": time_intensive_subjects.to_dict()
+    def _generate_personalized_advice(self, df):
+        """Génère des conseils personnalisés basés sur l'analyse des données"""
+        advice = {
+            "conseils_généraux": self._generate_general_advice(df),
+            "conseils_méthodologiques": self._generate_methodology_advice(df),
+            "conseils_motivation": self._generate_motivation_advice(df),
+            "techniques_apprentissage": self._suggest_learning_techniques(df),
+            "gestion_temps": self._generate_time_management_advice(df)
         }
+        return advice
 
-        return struggles
-
-    def suggest_exercises(self, student_id, subject=None):
-        """Suggère des exercices ciblés basés sur les besoins de l'étudiant"""
-        struggles = self.identify_struggles(student_id)
+    def _calculate_optimal_frequency(self, df):
+        """Calcule la fréquence optimale des sessions d'apprentissage"""
+        # Analyser l'intervalle entre les sessions réussies
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        df = df.sort_values('timestamp')
+        successful_sessions = df[df['score'] > 0.7]
         
-        # Charger les données d'apprentissage
-        with open(self.learning_data_file, "r", encoding='utf-8') as f:
-            learning_data = json.load(f)
-
-        df = pd.DataFrame(learning_data["learning_records"])
-        student_df = df[df["student_id"] == student_id]
-
-        if subject:
-            student_df = student_df[student_df["subject"] == subject]
-
-        # Identifier le niveau de difficulté approprié
-        avg_performance = student_df["score"].mean()
-        if avg_performance < 0.6:
-            target_difficulty = "facile"
-        elif avg_performance < 0.75:
-            target_difficulty = "moyen"
+        if len(successful_sessions) < 2:
+            return "3 à 4 sessions par semaine"
+            
+        intervals = successful_sessions['timestamp'].diff()
+        optimal_interval = intervals.median()
+        
+        if optimal_interval.days < 1:
+            return "Sessions quotidiennes"
+        elif optimal_interval.days < 2:
+            return "Sessions tous les deux jours"
         else:
-            target_difficulty = "difficile"
+            return f"{min(optimal_interval.days, 4)} sessions par semaine"
 
-        # Générer des suggestions d'exercices
-        suggestions = []
-        for subject, score in struggles["difficult_subjects"].items():
-            suggestions.append({
-                "subject": subject,
-                "difficulty": target_difficulty,
-                "focus_areas": self._identify_focus_areas(student_df, subject),
-                "recommended_duration": 30,  # minutes
-                "practice_type": "intensive"
-            })
-
-        return suggestions
-
-    def _generate_recommendations(self, df):
-        """Génère des recommandations personnalisées basées sur les performances"""
-        recommendations = []
+    def _create_weekly_schedule(self, df):
+        """Crée un planning hebdomadaire personnalisé"""
+        # Analyser les jours les plus productifs
+        df['day'] = pd.to_datetime(df['timestamp']).dt.day_name()
+        best_days = df.groupby('day')['score'].mean().nlargest(4)
         
-        # Analyser le temps passé
-        avg_time = df["time_spent"].mean()
-        if avg_time > df["time_spent"].median() * 1.5:
-            recommendations.append("Considérer des sessions d'étude plus courtes mais plus fréquentes")
-
-        # Analyser les erreurs communes
-        if "error_types" in df.columns:
-            common_errors = df["error_types"].value_counts()
-            if not common_errors.empty:
-                recommendations.append(f"Concentrez-vous sur la correction de: {common_errors.index[0]}")
-
-        # Analyser le rythme d'apprentissage
-        completion_trend = df["completion_rate"].diff().mean()
-        if completion_trend < 0:
-            recommendations.append("Votre rythme ralentit, prenez le temps de revoir les concepts de base")
-
-        return recommendations
-
-    def _identify_focus_areas(self, df, subject):
-        """Identifie les domaines spécifiques nécessitant plus d'attention"""
-        subject_df = df[df["subject"] == subject]
+        schedule = {}
+        days = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
         
-        focus_areas = []
+        for day in days:
+            if day in best_days.index:
+                schedule[day] = {
+                    "sessions": [f"{hour}h00" for hour in df[df["day"] == day].groupby('hour')['score'].mean().nlargest(2).index.tolist()],
+                    "priorité": "haute" if day in best_days.nlargest(2).index else "moyenne",
+                    "focus": self._suggest_daily_focus(df, day)
+                }
+            else:
+                schedule[day] = {
+                    "sessions": [],
+                    "priorité": "repos",
+                    "focus": "révisions légères ou repos"
+                }
+                
+        return schedule
+
+    def _generate_general_advice(self, df):
+        """Génère des conseils généraux basés sur l'analyse des données"""
+        advice = []
         
-        # Analyser les sous-thèmes
-        if "sub_topic" in subject_df.columns:
-            weak_topics = subject_df.groupby("sub_topic")["score"].mean()
-            weak_topics = weak_topics[weak_topics < 0.6]
-            focus_areas.extend(weak_topics.index.tolist())
+        # Analyser le pattern de progression
+        progress_pattern = df['score'].diff().mean()
+        if progress_pattern < 0:
+            advice.append("Prenez le temps de consolider vos acquis avant d'avancer")
+        elif progress_pattern > 0.1:
+            advice.append("Votre progression est excellente, maintenez ce rythme")
+            
+        # Analyser la régularité
+        time_between_sessions = pd.to_datetime(df['timestamp']).diff().mean()
+        if time_between_sessions.days > 3:
+            advice.append("Une pratique plus régulière améliorerait votre apprentissage")
+            
+        return advice
 
-        # Analyser les types d'exercices
-        if "exercise_type" in subject_df.columns:
-            weak_types = subject_df.groupby("exercise_type")["score"].mean()
-            weak_types = weak_types[weak_types < 0.6]
-            focus_areas.extend(weak_types.index.tolist())
+    def _generate_methodology_advice(self, df):
+        """Génère des conseils méthodologiques personnalisés"""
+        methodology = []
+        
+        # Analyser l'efficacité selon le type de contenu
+        content_effectiveness = df.groupby('content_type')['score'].mean()
+        best_content_type = content_effectiveness.idxmax()
+        
+        methodology.append(f"Vous apprenez mieux avec le format {best_content_type}")
+        
+        # Suggestions basées sur la durée des sessions
+        avg_duration = df['time_spent'].mean()
+        if avg_duration > 90:
+            methodology.append("Essayez de diviser vos sessions en périodes plus courtes")
+        
+        return methodology
 
-        return focus_areas 
+    def _generate_motivation_advice(self, df):
+        """Génère des conseils pour maintenir la motivation"""
+        motivation = []
+        
+        # Analyser les progrès récents
+        recent_progress = df.tail(5)['score'].mean() - df.head(5)['score'].mean()
+        if recent_progress > 0:
+            motivation.append("Vos progrès récents sont encourageants, continuez ainsi !")
+        else:
+            motivation.append("N'oubliez pas que les difficultés font partie du processus d'apprentissage")
+            
+        return motivation
+
+    def _suggest_learning_techniques(self, df):
+        """Suggère des techniques d'apprentissage adaptées"""
+        techniques = []
+        
+        # Analyser le style d'apprentissage dominant
+        if 'content_type' in df.columns:
+            preferred_style = df.groupby('content_type')['score'].mean().idxmax()
+            
+            techniques_map = {
+                "visual": [
+                    "Utilisez des cartes mentales",
+                    "Créez des schémas explicatifs",
+                    "Regardez des vidéos éducatives"
+                ],
+                "audio": [
+                    "Enregistrez vos cours",
+                    "Participez à des discussions de groupe",
+                    "Expliquez les concepts à voix haute"
+                ],
+                "practical": [
+                    "Faites des exercices pratiques",
+                    "Créez des projets personnels",
+                    "Appliquez les concepts à des cas réels"
+                ]
+            }
+            
+            techniques.extend(techniques_map.get(preferred_style, []))
+            
+        return techniques
+
+    def _generate_time_management_advice(self, df):
+        """Génère des conseils pour la gestion du temps"""
+        time_advice = []
+        
+        # Analyser les sessions les plus productives
+        df['hour'] = pd.to_datetime(df['timestamp']).dt.hour
+        best_hours = df.groupby('hour')['score'].mean().nlargest(3)
+        
+        time_advice.append(f"Vos meilleures heures d'apprentissage sont : {', '.join([f'{h}h' for h in best_hours.index])}")
+        
+        # Conseils sur la durée des sessions
+        optimal_duration = df.groupby(pd.qcut(df['time_spent'], 4))['score'].mean().idxmax()
+        time_advice.append(f"Durée optimale de session : {int(optimal_duration.left)} à {int(optimal_duration.right)} minutes")
+        
+        return time_advice
+
+    def _suggest_daily_focus(self, df, day):
+        """Suggère un focus d'apprentissage pour chaque jour"""
+        # Analyser les performances par sujet pour ce jour
+        day_df = df[pd.to_datetime(df['timestamp']).dt.day_name() == day]
+        if len(day_df) > 0:
+            best_subject = day_df.groupby('subject')['score'].mean().idxmax()
+            return f"Focus sur {best_subject}"
+        return "Révisions générales" 
