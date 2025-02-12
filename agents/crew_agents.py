@@ -1,107 +1,111 @@
 from crewai import Agent
-from langchain_openai import ChatOpenAI
-from .sensor_agent import SensorAgent
-from .scheduler_agent import SchedulerAgent
-from .user_agent import UserAgent
+import google.generativeai as genai
+from .student_agent import StudentAgent
+from .content_agent import ContentAgent
+from .tutor_agent import TutorAgent
+import os
+from dotenv import load_dotenv
 
-class SmartHomeCrewAgents:
+class AdaptiveLearningCrewAgents:
     def __init__(self):
-        # Initialiser le modèle OpenAI
-        self.llm = ChatOpenAI(
-            model="gpt-4",
-            temperature=0.7
-        )
+        # Charger les variables d'environnement
+        load_dotenv()
+        
+        # Configuration de Gemini
+        genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
+        
+        # Initialiser le modèle Gemini
+        self.model = genai.GenerativeModel('gemini-pro')
         
         # Initialiser les agents spécialisés
-        self.sensor_manager = SensorAgent()
-        self.scheduler_manager = SchedulerAgent()
-        self.user_manager = UserAgent()
+        self.student_manager = StudentAgent()
+        self.content_manager = ContentAgent()
+        self.tutor_manager = TutorAgent()
 
-    def create_sensor_agent(self):
-        """Crée l'agent responsable des capteurs"""
+    def _create_llm_with_gemini(self):
+        """Crée une fonction qui utilise Gemini pour générer des réponses"""
+        def llm_function(prompt):
+            response = self.model.generate_content(prompt)
+            return response.text
+        return llm_function
+
+    def create_student_agent(self):
+        """Crée l'agent responsable de l'analyse des étudiants"""
         return Agent(
-            role='Sensor Specialist',
-            goal='Monitor and analyze home environmental data with AI assistance',
-            backstory='Expert in IoT sensors and data analysis using AI',
+            role='Student Analysis Specialist',
+            goal='Analyze and track student learning patterns and progress',
+            backstory='Expert in educational psychology and learning analytics',
             tools=[
                 {
-                    'name': 'read_sensors',
-                    'description': 'Read current sensor values',
-                    'func': self.sensor_manager.lire_capteurs
+                    'name': 'analyze_performance',
+                    'description': 'Analyze student performance and learning patterns',
+                    'func': self.student_manager.analyze_performance
                 },
                 {
-                    'name': 'update_sensors',
-                    'description': 'Update sensor values',
-                    'func': self.sensor_manager.mettre_a_jour_capteurs
+                    'name': 'get_learning_style',
+                    'description': 'Determine student learning style',
+                    'func': self.student_manager.get_learning_style
                 },
                 {
-                    'name': 'get_sensor_by_id',
-                    'description': 'Get specific sensor data by ID',
-                    'func': self.sensor_manager.get_sensor_by_id
+                    'name': 'track_progress',
+                    'description': 'Track student progress over time',
+                    'func': self.student_manager.track_progress
                 }
             ],
             verbose=True,
-            llm=self.llm
+            llm=self._create_llm_with_gemini()
         )
 
-    def create_scheduler_agent(self):
-        """Crée l'agent responsable de la planification"""
+    def create_content_agent(self):
+        """Crée l'agent responsable du contenu pédagogique"""
         return Agent(
-            role='Energy Optimizer',
-            goal='Optimize energy usage using AI-powered scheduling',
-            backstory='Expert in AI-driven energy management and optimization',
+            role='Content Recommendation Specialist',
+            goal='Recommend and adapt learning content based on student needs',
+            backstory='Expert in educational content curation and personalization',
             tools=[
                 {
-                    'name': 'adjust_schedules',
-                    'description': 'Adjust device schedules to optimize energy usage',
-                    'func': self.scheduler_manager.ajuster_horaires
+                    'name': 'recommend_content',
+                    'description': 'Recommend personalized learning content',
+                    'func': self.content_manager.recommend_content
                 },
                 {
-                    'name': 'get_device_schedule',
-                    'description': 'Get schedule for a specific device',
-                    'func': self.scheduler_manager.get_device_schedule
+                    'name': 'adapt_difficulty',
+                    'description': 'Adapt content difficulty level',
+                    'func': self.content_manager.adapt_difficulty
                 },
                 {
-                    'name': 'get_all_schedules',
-                    'description': 'Get all device schedules',
-                    'func': self.scheduler_manager.get_all_schedules
+                    'name': 'get_content_stats',
+                    'description': 'Get statistics about content effectiveness',
+                    'func': self.content_manager.get_content_stats
                 }
             ],
             verbose=True,
-            llm=self.llm
+            llm=self._create_llm_with_gemini()
         )
 
-    def create_user_agent(self):
-        """Crée l'agent responsable de l'interface utilisateur"""
+    def create_tutor_agent(self):
+        """Crée l'agent responsable du tutorat virtuel"""
         return Agent(
-            role='User Experience Specialist',
-            goal='Understand and implement user preferences with AI assistance',
-            backstory='Expert in AI-powered comfort optimization and user experience',
+            role='Virtual Tutor Specialist',
+            goal='Provide personalized tutoring and support',
+            backstory='Expert in adaptive tutoring and student support',
             tools=[
                 {
-                    'name': 'get_preferences',
-                    'description': 'Get user preferences',
-                    'func': self.user_manager.get_preferences
+                    'name': 'provide_feedback',
+                    'description': 'Provide personalized feedback',
+                    'func': self.tutor_manager.provide_feedback
                 },
                 {
-                    'name': 'modify_preference',
-                    'description': 'Modify user preference for a sensor',
-                    'func': self.user_manager.modifier_preference
+                    'name': 'identify_struggles',
+                    'description': 'Identify areas where student is struggling',
+                    'func': self.tutor_manager.identify_struggles
                 },
                 {
-                    'name': 'get_consumption_alerts',
-                    'description': 'Get alerts about high energy consumption',
-                    'func': self.user_manager.get_consumption_alerts
+                    'name': 'suggest_exercises',
+                    'description': 'Suggest targeted practice exercises',
+                    'func': self.tutor_manager.suggest_exercises
                 }
             ],
             verbose=True,
-            llm=self.llm
+            llm=self._create_llm_with_gemini()
         )
-
-    def start_monitoring(self):
-        """Démarre la surveillance continue des capteurs"""
-        self.sensor_manager.start(intervalle=2)
-
-    def stop_monitoring(self):
-        """Arrête la surveillance des capteurs"""
-        self.sensor_manager.stop()
